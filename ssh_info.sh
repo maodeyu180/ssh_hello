@@ -1,6 +1,7 @@
 #!/bin/bash
 echo "正在生成ssh_hello 文件"
-cat << EOF > /etc/profile.d/ssh_hello.sh
+rm -rf /etc/profile.d/ssh_hello.sh
+cat << 'EOF' > /etc/profile.d/ssh_hello.sh
 warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
 IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
 mac_now=$(ifconfig eth0 |grep "ether"| awk '{print $2}')
