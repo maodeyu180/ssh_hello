@@ -7,9 +7,21 @@ if [ -n "$SSH_CONNECTION" ]; then
   IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
   mac_now=$(ifconfig eth0 |grep "ether"| awk '{print $2}')
   if command -v sensors &> /dev/null; then
-          temp=$(sensors | grep -i 'temp1' | awk '{print $2}')
+      temps=$(sensors | grep -i 'core\|package' | awk '{print $3}' | tr -d '+°C')
+      if [ -n "$temps" ]; then
+          sum=0
+          count=0
+          for temp_val in $temps; do
+              sum=$(echo "$sum + $temp_val" | bc)
+              count=$((count + 1))
+          done
+          avg_temp=$(echo "scale=1; $sum / $count" | bc)
+          temp="${avg_temp}°C"
+      else
+          temp="无法检测 (传感器输出无匹配项)"
+      fi
   else
-          temp="无法检测 (请安装 lm-sensors)"
+      temp="无法检测 (请安装 lm-sensors)"
   fi
   # 当前连接的 IP 地址
   CURRENT_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
