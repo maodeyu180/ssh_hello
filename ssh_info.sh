@@ -2,7 +2,7 @@
 echo "正在生成ssh_hello 文件"
 rm -rf /etc/profile.d/ssh_hello.sh
 cat << 'EOF' > /etc/profile.d/ssh_hello.sh
-if [-z "SSH_INFO_SHOWN" ]; then
+if [ -n "$SSH_CONNECTION" ]; then
   warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
   IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
   mac_now=$(ifconfig eth0 |grep "ether"| awk '{print $2}')
@@ -25,8 +25,8 @@ if [-z "SSH_INFO_SHOWN" ]; then
   CURRENT_SSH_CONNECTIONS=$(who | grep 'pts/' | wc -l)
   clear
   echo -e "
-  
-  
+
+
   \e[35m
            __  __    _    ___  ____  _______   ___   _
           |  \/  |  / \  / _ \|  _ \| ____\ \ / / | | |
@@ -34,9 +34,9 @@ if [-z "SSH_INFO_SHOWN" ]; then
           | |  | |/ ___ \ |_| | |_| | |___  | | | |_| |
           |_|  |_/_/   \_\___/|____/|_____| |_|  \___/
   \e[0m
-  
-  
-  
+
+
+
      CPU 信息 : $(cat /proc/cpuinfo | grep "processor" | sort | uniq | wc -l)核处理器 | $(uname -p)架构
      系统版本 : $(awk -F '[= "]' '/PRETTY_NAME/{print $3,$4,$5}' /etc/os-release) | $(uname -r)-$(getconf LONG_BIT)
      可用存储 : $(df -m / | grep -v File | awk '{a=$4*100/$2;b=$4} {printf("%.1f%s %.1fM\n",a,"%",b)}') ${warning}
@@ -50,7 +50,6 @@ if [-z "SSH_INFO_SHOWN" ]; then
      LAST TIME: $LAST_TIME
      SSH连接数：$CURRENT_SSH_CONNECTIONS
   "
-  export SSH_INFO_SHOWN=1
 fi
 EOF
 echo "授予ssh_hello 可执行权限"
