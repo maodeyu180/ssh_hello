@@ -39,17 +39,17 @@ if [ -n "$SSH_CONNECTION" ]; then
 
 # 获取SSH日志来源
 get_failed_attempts() {
-    local last_success="\$1"
+    local last_success="$1"
     if [ -f "/var/log/auth.log" ]; then
         # Debian/Ubuntu 传统日志
-        grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="\$last_success" '\$0 > last' | wc -l
+        grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="$last_success" '$0 > last' | wc -l
     elif [ -f "/var/log/secure" ]; then
         # RHEL/CentOS 传统日志
-        grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="\$last_success" '\$0 > last' | wc -l
+        grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="$last_success" '$0 > last' | wc -l
     elif command -v journalctl >/dev/null 2>&1; then
         # systemd journal
-        if [ -n "\$last_success" ]; then
-            journalctl -u sshd --since="\$last_success" | grep "Failed password" | wc -l
+        if [ -n "$last_success" ]; then
+            journalctl -u sshd --since="$last_success" | grep "Failed password" | wc -l
         else
             journalctl -u sshd --since="today" | grep "Failed password" | wc -l
         fi
@@ -61,24 +61,23 @@ get_failed_attempts() {
 get_last_success() {
     if [ -f "/var/log/auth.log" ]; then
         # Debian/Ubuntu 传统日志
-        grep "sshd" "/var/log/auth.log" | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+        grep "sshd" "/var/log/auth.log" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}'
     elif [ -f "/var/log/secure" ]; then
         # RHEL/CentOS 传统日志
-        grep "sshd" "/var/log/secure" | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+        grep "sshd" "/var/log/secure" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}'
     elif command -v journalctl >/dev/null 2>&1; then
         # systemd journal
-        journalctl -u sshd | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+        journalctl -u sshd | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}'
     fi
 }
 
 # 获取上次成功登录时间和失败尝试次数
-LAST_SUCCESS=\$(get_last_success)
-if [ -n "\$LAST_SUCCESS" ]; then
-    FAILED_SINCE_LAST=\$(get_failed_attempts "\$LAST_SUCCESS")
+LAST_SUCCESS=$(get_last_success)
+if [ -n "$LAST_SUCCESS" ]; then
+    FAILED_SINCE_LAST=$(get_failed_attempts "$LAST_SUCCESS")
 else
-    FAILED_SINCE_LAST=\$(get_failed_attempts "")
+    FAILED_SINCE_LAST=$(get_failed_attempts "")
 fi
-
 
 
   CURRENT_SSH_CONNECTIONS=$(who | grep 'pts/' | wc -l)
