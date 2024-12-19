@@ -45,7 +45,7 @@ elif [ -f "/var/log/secure" ]; then
     LAST_SUCCESS=$(grep "sshd" "/var/log/secure" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
 elif command -v journalctl >/dev/null 2>&1; then
     # systemd journal
-    LAST_SUCCESS=$(journalctl _SYSTEMD_UNIT=sshd.service | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
+    LAST_SUCCESS=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
 fi
 
 # 获取失败尝试次数
@@ -58,7 +58,7 @@ if [ -n "$LAST_SUCCESS" ]; then
         FAILED_SINCE_LAST=$(grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="$LAST_SUCCESS" '$0 > last' | wc -l)
     elif command -v journalctl >/dev/null 2>&1; then
         # systemd journal - 改进的失败统计
-        FAILED_SINCE_LAST=$(journalctl _SYSTEMD_UNIT=sshd.service --since="$LAST_SUCCESS" | grep -i "failed\|failure" | grep -i "password\|authentication" | wc -l)
+        FAILED_SINCE_LAST=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service --since="$LAST_SUCCESS" | grep -i "failed\|failure" | grep -i "password\|authentication" | wc -l)
     else
         FAILED_SINCE_LAST="无法获取"
     fi
@@ -69,7 +69,7 @@ else
         FAILED_SINCE_LAST=$(grep "sshd" "/var/log/secure" | grep "Failed password" | wc -l)
     elif command -v journalctl >/dev/null 2>&1; then
         # systemd journal - 改进的失败统计（今日）
-        FAILED_SINCE_LAST=$(journalctl _SYSTEMD_UNIT=sshd.service --since=today | grep -i "failed\|failure" | grep -i "password\|authentication" | wc -l)
+        FAILED_SINCE_LAST=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service --since=today | grep -i "failed\|failure" | grep -i "password\|authentication" | wc -l)
     else
         FAILED_SINCE_LAST="无法获取"
     fi
