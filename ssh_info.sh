@@ -34,6 +34,28 @@ if [ -n "$SSH_CONNECTION" ]; then
       LAST_IP=None
       LAST_TIME=None
   fi
+if [ -f "/var/log/auth.log" ]; then
+SSH_LOG="/var/log/auth.log"
+elif [ -f "/var/log/secure" ]; then
+SSH_LOG="/var/log/secure"
+else
+SSH_LOG=""
+fi      
+if [ -n "$SSH_LOG" ]; then
+    # 获取当前用户最后两次成功登录的记录
+    LAST_SUCCESS=$(grep "sshd" "$SSH_LOG" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
+    
+    if [ -n "$LAST_SUCCESS" ]; then
+        # 统计从上次成功登录到现在的失败尝试次数
+        FAILED_SINCE_LAST=$(grep "sshd" "$SSH_LOG" | grep "Failed password" | awk -v last="$LAST_SUCCESS" '$0 > last' | wc -l)
+    else
+        FAILED_SINCE_LAST="无历史记录"
+    fi
+else
+    FAILED_SINCE_LAST="无法获取"
+fi
+
+
   CURRENT_SSH_CONNECTIONS=$(who | grep 'pts/' | wc -l)
   clear
   echo -e "
@@ -61,6 +83,7 @@ if [ -n "$SSH_CONNECTION" ]; then
      上次 IP  : $LAST_IP
      LAST TIME: $LAST_TIME
      SSH连接数：$CURRENT_SSH_CONNECTIONS
+     失败次数 ：$FAILED_SINCE_LAST
   "
 fi
 EOF
