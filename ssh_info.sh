@@ -34,26 +34,51 @@ if [ -n "$SSH_CONNECTION" ]; then
       LAST_IP=None
       LAST_TIME=None
   fi
-if [ -f "/var/log/auth.log" ]; then
-SSH_LOG="/var/log/auth.log"
-elif [ -f "/var/log/secure" ]; then
-SSH_LOG="/var/log/secure"
-else
-SSH_LOG=""
-fi      
-if [ -n "$SSH_LOG" ]; then
-    # 获取当前用户最后两次成功登录的记录
-    LAST_SUCCESS=$(grep "sshd" "$SSH_LOG" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
-    
-    if [ -n "$LAST_SUCCESS" ]; then
-        # 统计从上次成功登录到现在的失败尝试次数
-        FAILED_SINCE_LAST=$(grep "sshd" "$SSH_LOG" | grep "Failed password" | awk -v last="$LAST_SUCCESS" '$0 > last' | wc -l)
+
+
+
+# 获取SSH日志来源
+get_failed_attempts() {
+    local last_success="\$1"
+    if [ -f "/var/log/auth.log" ]; then
+        # Debian/Ubuntu 传统日志
+        grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="\$last_success" '\$0 > last' | wc -l
+    elif [ -f "/var/log/secure" ]; then
+        # RHEL/CentOS 传统日志
+        grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="\$last_success" '\$0 > last' | wc -l
+    elif command -v journalctl >/dev/null 2>&1; then
+        # systemd journal
+        if [ -n "\$last_success" ]; then
+            journalctl -u sshd --since="\$last_success" | grep "Failed password" | wc -l
+        else
+            journalctl -u sshd --since="today" | grep "Failed password" | wc -l
+        fi
     else
-        FAILED_SINCE_LAST="无历史记录"
+        echo "无法获取"
     fi
+}
+
+get_last_success() {
+    if [ -f "/var/log/auth.log" ]; then
+        # Debian/Ubuntu 传统日志
+        grep "sshd" "/var/log/auth.log" | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+    elif [ -f "/var/log/secure" ]; then
+        # RHEL/CentOS 传统日志
+        grep "sshd" "/var/log/secure" | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+    elif command -v journalctl >/dev/null 2>&1; then
+        # systemd journal
+        journalctl -u sshd | grep "Accepted" | grep "\$USER" | tail -2 | head -1 | awk '{print \$1" "\$2" "\$3}'
+    fi
+}
+
+# 获取上次成功登录时间和失败尝试次数
+LAST_SUCCESS=\$(get_last_success)
+if [ -n "\$LAST_SUCCESS" ]; then
+    FAILED_SINCE_LAST=\$(get_failed_attempts "\$LAST_SUCCESS")
 else
-    FAILED_SINCE_LAST="无法获取"
+    FAILED_SINCE_LAST=\$(get_failed_attempts "")
 fi
+
 
 
   CURRENT_SSH_CONNECTIONS=$(who | grep 'pts/' | wc -l)
