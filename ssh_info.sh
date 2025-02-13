@@ -5,6 +5,7 @@ cat << 'EOF' > /etc/profile.d/ssh_hello.sh
 if [ -n "$SSH_CONNECTION" ]; then
   warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
   IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
+  IPV6=$(ifconfig eth0 | grep '\<inet6\>' | awk '{print $2}' | awk 'NR==1')
   mac_now=$(ifconfig eth0 |grep "ether"| awk '{print $2}')
   if command -v sensors &> /dev/null; then
       temps=$(sensors | grep -i 'core\|package' | awk '{print $3}' | tr -d '+°C')
@@ -97,7 +98,7 @@ fi
      可用存储 : $(df -m / | grep -v File | awk '{a=$4*100/$2;b=$4} {printf("%.1f%s %.1fM\n",a,"%",b)}') ${warning}
      可用内存 : $(free -m | grep Mem | awk '{a=$7*100/$2;b=$7} {printf("%.1f%s %.1fM\n",a,"%",b)}')
      启动时间 : $(awk '{a=int($1/86400);b=int(($1%86400)/3600);c=int(($1%3600)/60);d=int($1%60)} {printf("%d 天 %d 小时 %d 分钟 %d 秒\n",a,b,c,d)}' /proc/uptime)
-     设备 IP  : $IP
+     设备 IP  : $IP / $IPV6
      设备温度 : $temp
      MAC 地址 : $mac_now
      本次 IP  : $CURRENT_IP
