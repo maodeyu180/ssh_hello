@@ -5,12 +5,12 @@ cat << 'EOF' > /etc/profile.d/ssh_hello.sh
 if [ -n "$SSH_CONNECTION" ]; then
   warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
   if command -v ifconfig &> /dev/null; then
-    echo("use ipconfig")
+    echo "use ipconfig"
     INTERFACE=$(ifconfig -a | grep -m 1 'flags=' | awk -F: '{print $1}')
     IP=$(ifconfig $INTERFACE | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
     IPV6=$(ifconfig $INTERFACE | grep '\<inet6\>' | awk '{print $2}' | awk 'NR==1')
   else
-    echo("use ip addr")
+    echo "use ip addr"
     INTERFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -v 'lo' | head -n 1)
     IP=$(ip addr show $INTERFACE | grep '\<inet\>' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | awk 'NR==1')
     IPV6=$(ip addr show $INTERFACE | grep '\<inet6\>' | awk '{print $2}' | cut -d/ -f1 | awk 'NR==1')
