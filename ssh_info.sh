@@ -4,8 +4,13 @@ rm -rf /etc/profile.d/ssh_hello.sh
 cat << 'EOF' > /etc/profile.d/ssh_hello.sh
 if [ -n "$SSH_CONNECTION" ]; then
   warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
-  IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
-  IPV6=$(ifconfig eth0 | grep '\<inet6\>' | awk '{print $2}' | awk 'NR==1')
+  if command -v ifconfig &> /dev/null; then
+    IP=$(ifconfig eth0 | grep '\<inet\>'| grep -v '127.0.0.1' | awk '{print $2}' | awk 'NR==1')
+    IPV6=$(ifconfig eth0 | grep '\<inet6\>' | awk '{print $2}' | awk 'NR==1')
+  else
+    IP=$(ip addr show eth0 | grep '\<inet\>' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | awk 'NR==1')
+    IPV6=$(ip addr show eth0 | grep '\<inet6\>' | awk '{print $2}' | cut -d/ -f1 | awk 'NR==1')
+  fi
   mac_now=$(ifconfig eth0 |grep "ether"| awk '{print $2}')
   if command -v sensors &> /dev/null; then
       temps=$(sensors | grep -i 'core\|package' | awk '{print $3}' | tr -d '+°C')
