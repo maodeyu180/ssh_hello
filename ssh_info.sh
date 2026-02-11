@@ -96,10 +96,15 @@ if [ -n "$SSH_CONNECTION" ]; then
     # 当前连接的 IP 地址
     CURRENT_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
 
-    # 上次连接信息（兼容无 -i 参数的环境）
-    LAST_INFO=$(last -i 2>/dev/null | grep "pts/" | head -2 | tail -1)
+    # 上次连接信息（兼容不同 last 选项）
+    LAST_CMD="last -i"
+    if last -Fi >/dev/null 2>&1; then
+        LAST_CMD="last -Fi"
+    fi
+
+    LAST_INFO=$($LAST_CMD "$USER" 2>/dev/null | grep "pts/" | head -2 | tail -1)
     if [ -z "$LAST_INFO" ]; then
-        LAST_INFO=$(last 2>/dev/null | grep "pts/" | head -2 | tail -1)
+        LAST_INFO=$($LAST_CMD 2>/dev/null | grep "pts/" | head -2 | tail -1)
     fi
     if [ -n "$LAST_INFO" ]; then
         LAST_IP=$(echo $LAST_INFO | awk '{print $3}')
@@ -109,42 +114,76 @@ if [ -n "$SSH_CONNECTION" ]; then
         LAST_TIME="无记录"
     fi
 
+    # 计算上次登录时间戳（用于失败次数统计）
+    LAST_LOGIN_EPOCH=""
+    if [ -n "$LAST_INFO" ]; then
+        LAST_LOGIN_STR=$(echo "$LAST_INFO" | awk '{print $4,$5,$6,$7,$8}')
+        LAST_LOGIN_EPOCH=$(date -d "$LAST_LOGIN_STR" +%s 2>/dev/null)
+        if [ -z "$LAST_LOGIN_EPOCH" ]; then
+            LAST_LOGIN_STR=$(echo "$LAST_INFO" | awk '{print $4,$5,$6,$7}')
+            LAST_LOGIN_STR="$LAST_LOGIN_STR $(date +%Y)"
+            LAST_LOGIN_EPOCH=$(date -d "$LAST_LOGIN_STR" +%s 2>/dev/null)
+        fi
+    fi
+
     # 获取登录失败次数的通用函数
     get_failed_count() {
-        local since="$1"
-        local count=""
-        if [ -f "/var/log/auth.log" ]; then
-            if [ -n "$since" ]; then
-                count=$(grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l)
-            else
-                count=$(grep "sshd" "/var/log/auth.log" | grep "Failed password" | wc -l)
-            fi
-        elif [ -f "/var/log/secure" ]; then
-            if [ -n "$since" ]; then
-                count=$(grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l)
-            else
-                count=$(grep "sshd" "/var/log/secure" | grep "Failed password" | wc -l)
-            fi
-        elif command -v journalctl >/dev/null 2>&1; then
+        local since_epoch="$1"
+        local count="0"
+        local log_file=""
+
+        if command -v journalctl >/dev/null 2>&1; then
             local since_flag="--since=today"
-            [ -n "$since" ] && since_flag="--since=$since"
+            [ -n "$since_epoch" ] && since_flag="--since=@$since_epoch"
             count=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service $since_flag 2>/dev/null | grep -ci "failed.*password\|authentication.*failure")
+            echo "${count:-0}"
+            return
         fi
+
+        if [ -f "/var/log/auth.log" ]; then
+            log_file="/var/log/auth.log"
+        elif [ -f "/var/log/secure" ]; then
+            log_file="/var/log/secure"
+        fi
+
+        if [ -z "$log_file" ]; then
+            echo "0"
+            return
+        fi
+
+        if [ -z "$since_epoch" ]; then
+            count=$(grep "sshd" "$log_file" | grep "Failed password" | wc -l)
+            echo "${count:-0}"
+            return
+        fi
+
+        if awk 'BEGIN{exit(mktime("2026 02 11 00 00 00")>0?0:1)}' >/dev/null 2>&1; then
+            count=$(awk -v since="$since_epoch" '
+                function mon2num(m){
+                    return (m=="Jan")?1:(m=="Feb")?2:(m=="Mar")?3:(m=="Apr")?4:(m=="May")?5:(m=="Jun")?6:(m=="Jul")?7:(m=="Aug")?8:(m=="Sep")?9:(m=="Oct")?10:(m=="Nov")?11:(m=="Dec")?12:0
+                }
+                /sshd/ && /Failed password/ {
+                    mon=mon2num($1); day=$2; split($3,t,":")
+                    if (mon>0 && day>0) {
+                        ts=mktime(sprintf("%d %d %d %d %d %d", strftime("%Y"), mon, day, t[1], t[2], t[3]))
+                        if (ts >= since) c++
+                    }
+                }
+                END{print c+0}
+            ' "$log_file")
+        else
+            count=$(grep "sshd" "$log_file" | grep "Failed password" | while read -r mon day time rest; do
+                ts=$(date -d "$mon $day $time $(date +%Y)" +%s 2>/dev/null || echo 0)
+                if [ "$ts" -ge "$since_epoch" ] 2>/dev/null; then
+                    echo 1
+                fi
+            done | wc -l)
+        fi
+
         echo "${count:-0}"
     }
 
-
-    # 获取上次成功登录时间
-    LAST_SUCCESS=""
-    if [ -f "/var/log/auth.log" ]; then
-        LAST_SUCCESS=$(grep "sshd" "/var/log/auth.log" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
-    elif [ -f "/var/log/secure" ]; then
-        LAST_SUCCESS=$(grep "sshd" "/var/log/secure" | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
-    elif command -v journalctl >/dev/null 2>&1; then
-        LAST_SUCCESS=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service 2>/dev/null | grep "Accepted" | grep "$USER" | tail -2 | head -1 | awk '{print $1" "$2" "$3}')
-    fi
-
-    FAILED_SINCE_LAST=$(get_failed_count "$LAST_SUCCESS")
+    FAILED_SINCE_LAST=$(get_failed_count "$LAST_LOGIN_EPOCH")
 
     CURRENT_SSH_CONNECTIONS=$(who | grep 'pts/' | wc -l)
 
