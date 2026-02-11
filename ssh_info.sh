@@ -106,23 +106,41 @@ if [ -n "$SSH_CONNECTION" ]; then
     if [ -z "$LAST_INFO" ]; then
         LAST_INFO=$($LAST_CMD 2>/dev/null | grep "pts/" | head -2 | tail -1)
     fi
+    LAST_IP="无记录"
+    LAST_TIME="无记录"
+    LAST_LOGIN_EPOCH=""
+
     if [ -n "$LAST_INFO" ]; then
         LAST_IP=$(echo $LAST_INFO | awk '{print $3}')
         LAST_TIME=$(echo $LAST_INFO | awk '{for(i=4;i<=NF-1;i++) printf $i" "; print $(NF)}')
-    else
-        LAST_IP="无记录"
-        LAST_TIME="无记录"
-    fi
-
-    # 计算上次登录时间戳（用于失败次数统计）
-    LAST_LOGIN_EPOCH=""
-    if [ -n "$LAST_INFO" ]; then
+        # 计算上次登录时间戳（用于失败次数统计）
         LAST_LOGIN_STR=$(echo "$LAST_INFO" | awk '{print $4,$5,$6,$7,$8}')
         LAST_LOGIN_EPOCH=$(date -d "$LAST_LOGIN_STR" +%s 2>/dev/null)
         if [ -z "$LAST_LOGIN_EPOCH" ]; then
             LAST_LOGIN_STR=$(echo "$LAST_INFO" | awk '{print $4,$5,$6,$7}')
             LAST_LOGIN_STR="$LAST_LOGIN_STR $(date +%Y)"
             LAST_LOGIN_EPOCH=$(date -d "$LAST_LOGIN_STR" +%s 2>/dev/null)
+        fi
+    fi
+
+    # last 无记录时，回退到 auth.log / secure / journalctl
+    if [ "$LAST_IP" = "无记录" ]; then
+        LAST_LOG_LINE=""
+        if [ -f "/var/log/auth.log" ]; then
+            LAST_LOG_LINE=$(grep "sshd" "/var/log/auth.log" | grep "Accepted" | grep "$USER" | tail -2 | head -1)
+        elif [ -f "/var/log/secure" ]; then
+            LAST_LOG_LINE=$(grep "sshd" "/var/log/secure" | grep "Accepted" | grep "$USER" | tail -2 | head -1)
+        elif command -v journalctl >/dev/null 2>&1; then
+            LAST_LOG_LINE=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service 2>/dev/null | grep "Accepted" | grep "$USER" | tail -2 | head -1)
+        fi
+        if [ -n "$LAST_LOG_LINE" ]; then
+            LAST_IP=$(echo "$LAST_LOG_LINE" | awk '{for(i=1;i<=NF;i++) if($i=="from") {print $(i+1); exit}}')
+            LAST_TIME=$(echo "$LAST_LOG_LINE" | awk '{print $1,$2,$3}')
+            LAST_LOGIN_STR="$LAST_TIME $(date +%Y)"
+            LAST_LOGIN_EPOCH=$(date -d "$LAST_LOGIN_STR" +%s 2>/dev/null)
+            if [ -z "$LAST_LOGIN_EPOCH" ]; then
+                LAST_LOGIN_EPOCH=$(date -d "$LAST_TIME" +%s 2>/dev/null)
+            fi
         fi
     fi
 
