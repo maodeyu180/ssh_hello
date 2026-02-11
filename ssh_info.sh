@@ -1,6 +1,58 @@
 #!/bin/bash
-echo "正在生成ssh_hello 文件"
+
+# --- 检查并安装 figlet ---
+if ! command -v figlet &> /dev/null; then
+    echo "正在检测 figlet..."
+    if [ -x "$(command -v apt-get)" ]; then
+        sudo apt-get update && sudo apt-get install -y figlet
+    elif [ -x "$(command -v yum)" ]; then
+        sudo yum install -y figlet
+    elif [ -x "$(command -v dnf)" ]; then
+        sudo dnf install -y figlet
+    elif [ -x "$(command -v pacman)" ]; then
+        sudo pacman -S --noconfirm figlet
+    else
+        echo "未找到 figlet，且无法自动安装。请先手动安装 figlet 软件包。"
+        exit 1
+    fi
+fi
+
+# --- 获取用户输入 ---
+echo "=================================================="
+read -p "请输入要生成的艺术字文本 (默认: $(hostname)): " BANNER_TEXT
+BANNER_TEXT=${BANNER_TEXT:-$(hostname)}
+
+echo "--------------------------------------------------"
+echo "请选择艺术字颜色:"
+echo "1. 红色"
+echo "2. 绿色"
+echo "3. 黄色"
+echo "4. 蓝色"
+echo "5. 紫色"
+echo "6. 青色"
+echo "7. 白色"
+read -p "请输入颜色编号 (默认: 5): " COLOR_CHOICE
+
+case $COLOR_CHOICE in
+    1) COLOR_CODE="31";;
+    2) COLOR_CODE="32";;
+    3) COLOR_CODE="33";;
+    4) COLOR_CODE="34";;
+    5) COLOR_CODE="35";;
+    6) COLOR_CODE="36";;
+    7) COLOR_CODE="37";;
+    *) COLOR_CODE="35";;
+esac
+echo "=================================================="
+
+# --- 生成 ASCII 艺术字 ---
+# 使用 sed 添加缩进以匹配原格式
+ASCII_ART=$(figlet -f standard "$BANNER_TEXT" | sed 's/^/            /')
+
+echo "正在生成 ssh_hello 文件..."
 rm -rf /etc/profile.d/ssh_hello.sh
+
+# --- 写入脚本 Part 1 (头部逻辑) ---
 cat << 'EOF' > /etc/profile.d/ssh_hello.sh
 if [ -n "$SSH_CONNECTION" ]; then
     warning=$(if [ "$(df -m / | grep -v File | awk '{print $4}')" == "0" ];then echo " 警告，存储空间已满，请立即检查和处置！";fi)
@@ -99,15 +151,17 @@ if [ -n "$SSH_CONNECTION" ]; then
 
     clear
     echo -e "
+EOF
 
-    \e[35m
-            __  __    _    ___  ____  _______   ___   _
-            |  \/  |  / \  / _ \|  _ \| ____\ \ / / | | |
-            | |\/| | / _ \| | | | | | |  _|  \ V /| | | |
-            | |  | |/ ___ \ |_| | |_| | |___  | | | |_| |
-            |_|  |_/_/   \_\___/|____/|_____| |_|  \___/
-    \e[0m
+# --- 写入脚本 Part 2 (动态生成的艺术字) ---
+# 注意：这里使用追加模式 (>>)，并处理颜色代码
+echo "    \e[${COLOR_CODE}m" >> /etc/profile.d/ssh_hello.sh
+# 使用 printf 确保反斜杠等字符原样输出
+printf "%s\n" "$ASCII_ART" >> /etc/profile.d/ssh_hello.sh
+echo "    \e[0m" >> /etc/profile.d/ssh_hello.sh
 
+# --- 写入脚本 Part 3 (剩余部分) ---
+cat << 'EOF' >> /etc/profile.d/ssh_hello.sh
 
 
         主 机 名 : $HOST_NAME
@@ -130,7 +184,8 @@ if [ -n "$SSH_CONNECTION" ]; then
     "
 fi
 EOF
+
 echo "授予ssh_hello 可执行权限"
 chmod 744 /etc/profile.d/ssh_hello.sh
 
-echo "请重连查看效果"
+echo "生成完成！请重新连接 SSH 查看效果。"
