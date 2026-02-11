@@ -1,31 +1,37 @@
 #!/bin/bash
 
 # --- 检查并安装 figlet ---
-# 检测是否是 root 用户
-if [ "$EUID" -eq 0 ]; then
-  SUDO_CMD=""
-else
-  if command -v sudo &> /dev/null; then
+# 检测是否是 root 用户（兼容无 EUID 的 shell）
+IS_ROOT=0
+if [ "${EUID:-$(id -u 2>/dev/null)}" -eq 0 ] 2>/dev/null; then
+  IS_ROOT=1
+fi
+
+SUDO_CMD=""
+if [ "$IS_ROOT" -ne 1 ]; then
+  if command -v sudo >/dev/null 2>&1; then
     SUDO_CMD="sudo"
   else
     echo "警告: 当前非 root 用户且未找到 sudo 命令，无法自动安装依赖。"
-    # 尝试继续，如果 figlet 已存在则无影响
-    SUDO_CMD=""
   fi
 fi
 
-if ! command -v figlet &> /dev/null; then
+if ! command -v figlet >/dev/null 2>&1; then
     echo "正在检测 figlet..."
-    if [ -x "$(command -v apt-get)" ]; then
-        $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y figlet
-    elif [ -x "$(command -v yum)" ]; then
-        $SUDO_CMD yum install -y figlet
-    elif [ -x "$(command -v dnf)" ]; then
-        $SUDO_CMD dnf install -y figlet
-    elif [ -x "$(command -v pacman)" ]; then
-        $SUDO_CMD pacman -S --noconfirm figlet
+    if [ "$IS_ROOT" -ne 1 ] && [ -z "$SUDO_CMD" ]; then
+        echo "未找到 figlet，且无 sudo 权限，跳过自动安装。将回退到普通文本显示。"
     else
-        echo "未找到 figlet，且无法自动安装。将回退到普通文本显示。"
+        if [ -x "$(command -v apt-get)" ]; then
+            $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y figlet
+        elif [ -x "$(command -v yum)" ]; then
+            $SUDO_CMD yum install -y figlet
+        elif [ -x "$(command -v dnf)" ]; then
+            $SUDO_CMD dnf install -y figlet
+        elif [ -x "$(command -v pacman)" ]; then
+            $SUDO_CMD pacman -S --noconfirm figlet
+        else
+            echo "未找到 figlet，且无法自动安装。将回退到普通文本显示。"
+        fi
     fi
 fi
 
