@@ -22,6 +22,15 @@ curl -o ssh_info.sh -sSL https://raw.githubusercontent.com/maodeyu180/ssh_hello/
 curl -o ssh_info.sh -sSL https://ghfast.top/https://raw.githubusercontent.com/maodeyu180/ssh_hello/main/ssh_info.sh && bash ssh_info.sh
 ```
 
+## 权限与依赖说明
+- 需要 root 权限写入 `/etc/profile.d/ssh_hello.sh` 并设置执行权限。
+- `figlet` 用于生成 ASCII 艺术字；脚本会尝试使用 `apt-get` / `yum` / `dnf` / `pacman` 自动安装。
+- 若非 root 且系统无 `sudo`，会跳过自动安装并回退为普通文本显示。
+
+## 卸载与更新
+- **卸载**：`rm -f /etc/profile.d/ssh_hello.sh`，然后重新登录。
+- **更新**：重新执行安装命令即可覆盖旧版本。
+
 ## 效果展示
 ![ssh效果](https://img.maodeyu.fun/blog/ssh_info_screent.webp)
 
