@@ -1,19 +1,31 @@
 #!/bin/bash
 
 # --- 检查并安装 figlet ---
+# 检测是否是 root 用户
+if [ "$EUID" -eq 0 ]; then
+  SUDO_CMD=""
+else
+  if command -v sudo &> /dev/null; then
+    SUDO_CMD="sudo"
+  else
+    echo "警告: 当前非 root 用户且未找到 sudo 命令，无法自动安装依赖。"
+    # 尝试继续，如果 figlet 已存在则无影响
+    SUDO_CMD=""
+  fi
+fi
+
 if ! command -v figlet &> /dev/null; then
     echo "正在检测 figlet..."
     if [ -x "$(command -v apt-get)" ]; then
-        sudo apt-get update && sudo apt-get install -y figlet
+        $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y figlet
     elif [ -x "$(command -v yum)" ]; then
-        sudo yum install -y figlet
+        $SUDO_CMD yum install -y figlet
     elif [ -x "$(command -v dnf)" ]; then
-        sudo dnf install -y figlet
+        $SUDO_CMD dnf install -y figlet
     elif [ -x "$(command -v pacman)" ]; then
-        sudo pacman -S --noconfirm figlet
+        $SUDO_CMD pacman -S --noconfirm figlet
     else
-        echo "未找到 figlet，且无法自动安装。请先手动安装 figlet 软件包。"
-        exit 1
+        echo "未找到 figlet，且无法自动安装。将回退到普通文本显示。"
     fi
 fi
 
@@ -46,11 +58,18 @@ esac
 echo "=================================================="
 
 # --- 生成 ASCII 艺术字 ---
-# 使用 sed 添加缩进以匹配原格式
-ASCII_ART=$(figlet -f standard "$BANNER_TEXT" | sed 's/^/            /')
+if command -v figlet &> /dev/null; then
+    # 使用 sed 添加缩进以匹配原格式
+    ASCII_ART=$(figlet -f standard "$BANNER_TEXT" | sed 's/^/            /')
+else
+    # figlet 未安装，使用普通文本
+    ASCII_ART="            $BANNER_TEXT"
+fi
 
 echo "正在生成 ssh_hello 文件..."
 rm -rf /etc/profile.d/ssh_hello.sh
+
+
 
 # --- 写入脚本 Part 1 (头部逻辑) ---
 cat << 'EOF' > /etc/profile.d/ssh_hello.sh

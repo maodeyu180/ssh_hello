@@ -14,12 +14,12 @@
 
 ### 海外服务器
 ```bash
-curl -sSL https://raw.githubusercontent.com/maodeyu180/ssh_hello/main/ssh_info.sh | bash
+curl -o ssh_info.sh -sSL https://raw.githubusercontent.com/maodeyu180/ssh_hello/main/ssh_info.sh && bash ssh_info.sh
 ```
 
 ### 国内服务器
 ```bash
-curl -sSL https://ghfast.top/https://raw.githubusercontent.com/maodeyu180/ssh_hello/main/ssh_info.sh | bash
+curl -o ssh_info.sh -sSL https://ghfast.top/https://raw.githubusercontent.com/maodeyu180/ssh_hello/main/ssh_info.sh && bash ssh_info.sh
 ```
 
 ## 效果展示
