@@ -35,26 +35,27 @@ if [ -n "$SSH_CONNECTION" ]; then
     # 获取登录失败次数的通用函数
     get_failed_count() {
         local since="$1"
+        local count=""
         if [ -f "/var/log/auth.log" ]; then
             if [ -n "$since" ]; then
-                grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l
+                count=$(grep "sshd" "/var/log/auth.log" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l)
             else
-                grep "sshd" "/var/log/auth.log" | grep "Failed password" | wc -l
+                count=$(grep "sshd" "/var/log/auth.log" | grep "Failed password" | wc -l)
             fi
         elif [ -f "/var/log/secure" ]; then
             if [ -n "$since" ]; then
-                grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l
+                count=$(grep "sshd" "/var/log/secure" | grep "Failed password" | awk -v last="$since" '$0 > last' | wc -l)
             else
-                grep "sshd" "/var/log/secure" | grep "Failed password" | wc -l
+                count=$(grep "sshd" "/var/log/secure" | grep "Failed password" | wc -l)
             fi
         elif command -v journalctl >/dev/null 2>&1; then
             local since_flag="--since=today"
             [ -n "$since" ] && since_flag="--since=$since"
-            journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service $since_flag 2>/dev/null | grep -ci "failed.*password\|authentication.*failure" || echo 0
-        else
-            echo "无法获取"
+            count=$(journalctl _SYSTEMD_UNIT=sshd.service _SYSTEMD_UNIT=ssh.service $since_flag 2>/dev/null | grep -ci "failed.*password\|authentication.*failure")
         fi
+        echo "${count:-0}"
     }
+
 
     # 获取上次成功登录时间
     LAST_SUCCESS=""
@@ -96,6 +97,7 @@ if [ -n "$SSH_CONNECTION" ]; then
         SWAP_INFO="无法获取"
     fi
 
+    clear
     echo -e "
 
     \e[35m
