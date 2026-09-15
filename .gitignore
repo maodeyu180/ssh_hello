@@ -1,0 +1,13 @@
+# 本地生成的预览文件
+/tests/preview.sh
+/ssh_hello.preview.sh
+
+# 集成测试生成的临时数据和命令记录
+/tests/.tmp-*/
+
+# Python 运行缓存；测试源代码仍纳入版本管理
+__pycache__/
+*.py[cod]
+
+# macOS 目录元数据
+.DS_Store
