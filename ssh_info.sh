@@ -80,14 +80,49 @@ case $- in
             set +u
             LC_ALL=C
             export LC_ALL
-PROFILE_HEAD
-printf "            printf '%s' '%s'\n" "\n\033[${COLOR_CODE}m%s\033[0m\n\n" "$QUOTED_ART"
-cat <<'PROFILE_BODY'
             # timeout 不存在/不支持时直接降级，绝不无保护地运行慢命令。
             bounded() {
                 command -v timeout >/dev/null 2>&1 || return 125
                 timeout -k 1 1 "$@" 2>/dev/null
             }
+PROFILE_HEAD
+printf "            BANNER_ART='%s'\n            BANNER_COLOR='%s'\n" "$QUOTED_ART" "$COLOR_CODE"
+cat <<'PROFILE_BODY'
+            # 恢复欢迎页显示前清屏；非交互会话已经在外层跳过。
+            case "${TERM:-}" in
+                ''|dumb) ;;
+                *) bounded clear || printf '\033[H\033[2J' ;;
+            esac
+
+            # 优先读取当前终端，COLUMNS 可能尚未设置或已过期。
+            TERM_COLUMNS=${COLUMNS:-80}
+            if TERM_SIZE=$(bounded stty size 2>/dev/null </dev/tty); then
+                case "${TERM_SIZE##* }" in
+                    ''|*[!0-9]*|0) ;;
+                    *) TERM_COLUMNS=${TERM_SIZE##* } ;;
+                esac
+            fi
+            case "$TERM_COLUMNS" in ''|*[!0-9]*) TERM_COLUMNS=80 ;; esac
+            printf '\n\033[%sm' "$BANNER_COLOR"
+            # 所有行使用相同缩进，按最长行居中，保留 ASCII 字形的相对位置。
+            printf '%s\n' "$BANNER_ART" | awk -v cols="$TERM_COLUMNS" '
+                {
+                    sub(/[[:space:]]+$/, "")
+                    lines[NR]=$0
+                    if(length($0)>width) width=length($0)
+                }
+                END {
+                    if(cols<1 || cols>10000) cols=80
+                    padding=int((cols-width)/2)
+                    if(padding<0) padding=0
+                    # BusyBox awk 不支持 printf 的动态 * 宽度。
+                    if(padding>0) indent=sprintf("%" padding "s", "")
+                    for(i=1;i<=NR;i++) {
+                        if(lines[i]=="") print ""
+                        else printf "%s%s\n", indent, lines[i]
+                    }
+                }'
+            printf '\033[0m\n'
             show() { printf '        %s : %s\n' "$1" "${2:-无法获取}"; }
 
             HOST_NAME=未知

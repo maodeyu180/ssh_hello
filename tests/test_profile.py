@@ -7,6 +7,7 @@ SSH_HELLO_TEST_SHELL=/bin/bash python3 -m unittest discover -s tests -v
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -33,6 +34,8 @@ class ProfileTest(unittest.TestCase):
         self.mock("who", "printf 'tester pts/0 2026-09-15 10:00 (192.0.2.10)\\n'")
         self.mock("last", "cat <<'ROWS'\n" + HISTORY + "ROWS")
         self.mock("journalctl", "printf 'Failed password for bad from 192.0.2.99\\npam_unix: authentication failure\\nFailed password for other from 192.0.2.98\\n'")
+        self.mock("stty", "printf '24 80\\n'")
+        self.mock("clear", "printf '\\033[H\\033[2J'")
         self.render("test-host")
 
     def mock(self, name, body):
@@ -40,20 +43,21 @@ class ProfileTest(unittest.TestCase):
         path.write_text("#!/bin/sh\nprintf '%s\\n' \"" + name + " $*\" >> /test/calls\n" + body + "\n")
         path.chmod(0o755)
 
-    def render(self, banner):
+    def render(self, banner, art=None):
         # figlet's local stub must not write the container-only trace path.
-        (self.bin / "figlet").write_text("#!/bin/sh\nexit 1\n")
+        (self.bin / "figlet").write_text("#!/bin/sh\n" + (
+            "exit 1\n" if art is None else "printf '%s' " + shlex.quote(art) + "\n"))
         env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}")
         subprocess.run(["bash", str(ROOT / "ssh_info.sh"), "--output", str(self.profile)],
                        input=banner + "\n5\n", text=True, capture_output=True,
                        env=env, check=True, timeout=5)
 
-    def run_profile(self, *, interactive=True, tty=True, ssh=True, setup="", suffix="", restricted=False, mounts=()):
+    def run_profile(self, *, interactive=True, tty=True, ssh=True, setup="", suffix="", restricted=False, mounts=(), term="dumb"):
         cmd = ["docker", "run", "--rm", "--network", "none"]
         if tty:
             cmd += ["-t"]
         cmd += ["-v", f"{self.work}:/test", "-e", "USER=tester", "-e", "SSH_TTY=/dev/pts/0",
-                "-e", "LC_ALL=C", "-e", "TERM=dumb"]
+                "-e", "LC_ALL=C", "-e", f"TERM={term}"]
         if ssh:
             cmd += ["-e", "SSH_CONNECTION=192.0.2.10 54321 2001:db8::20 22"]
         for path, target in mounts:
@@ -92,19 +96,73 @@ class ProfileTest(unittest.TestCase):
         print(f"\n  normal ({IMAGE}, {SHELL}): {self.elapsed:.2f}s")
 
     def test_noninteractive_is_silent(self):
-        out = self.run_profile(interactive=False)
+        out = self.run_profile(interactive=False, term="xterm")
         self.assertNotIn("test-host", out)
+        self.assertNotIn("\x1b", out)
         self.assertEqual(self.calls, "")
 
     def test_redirected_output_is_silent(self):
-        out = self.run_profile(tty=False)
+        out = self.run_profile(tty=False, term="xterm")
         self.assertNotIn("test-host", out)
+        self.assertNotIn("\x1b", out)
         self.assertEqual(self.calls, "")
 
     def test_local_login_is_silent(self):
-        out = self.run_profile(ssh=False)
+        out = self.run_profile(ssh=False, term="xterm")
         self.assertNotIn("test-host", out)
+        self.assertNotIn("\x1b", out)
         self.assertEqual(self.calls, "")
+
+    def test_screen_is_cleared_before_banner(self):
+        out = self.run_profile(term="xterm", setup="printf 'Ubuntu MOTD\\nLast login: previous session\\n'")
+        self.assertLess(out.index("Last login:"), out.index("\x1b[H\x1b[2J"))
+        self.assertLess(out.index("\x1b[H\x1b[2J"), out.index("test-host"))
+        self.assertIn("clear ", self.calls)
+
+    def test_clear_unavailable_uses_escape_fallback(self):
+        self.mock("clear", "exit 127")
+        out = self.run_profile(term="xterm")
+        self.assertLess(out.index("\x1b[H\x1b[2J"), out.index("test-host"))
+
+    def test_dumb_terminal_does_not_clear(self):
+        out = self.run_profile()
+        self.assertNotIn("\x1b[2J", out)
+        self.assertNotIn("clear ", self.calls)
+
+    def test_multiline_banner_is_centered_as_one_block(self):
+        self.render("YU", art=" | |   \n|___|   \n  |     \n")
+        out = self.run_profile()
+        plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out)
+        # The block is 5 columns wide; all three rows receive the same 37 spaces.
+        self.assertIn("\n" + " " * 37 + " | |\n" + " " * 37 + "|___|\n" + " " * 37 + "  |\n", plain)
+
+    def test_banner_uses_real_terminal_width(self):
+        (self.bin / "stty").unlink()
+        self.render("YU", art="|___|")
+        out = self.run_profile(setup="stty rows 24 cols 100 </dev/tty; COLUMNS=60")
+        plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out)
+        self.assertIn("\n" + " " * 47 + "|___|\n", plain)
+
+    def test_banner_width_falls_back_to_columns(self):
+        self.mock("stty", "exit 1")
+        self.render("YU", art="|___|")
+        out = self.run_profile(setup="COLUMNS=100")
+        plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out)
+        self.assertIn("\n" + " " * 47 + "|___|\n", plain)
+
+    def test_invalid_columns_falls_back_to_80(self):
+        self.mock("stty", "exit 1")
+        self.render("YU", art="|___|")
+        out = self.run_profile(setup="COLUMNS=invalid")
+        plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out)
+        self.assertIn("\n" + " " * 37 + "|___|\n", plain)
+
+    def test_narrow_terminal_does_not_damage_banner(self):
+        self.mock("stty", "printf '24 3\\n'")
+        self.render("YU", art="|___|")
+        out = self.run_profile()
+        plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out)
+        self.assertIn("\n|___|\n", plain)
 
     def test_banner_is_literal(self):
         banner = "team'\" $(touch /test/injected) `touch /test/injected2` \\n %s"
